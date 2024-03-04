@@ -1,1 +1,47 @@
+import serial
+import re
+from datetime import datetime
+import requests
+
+# Configuration for serial port
+SERIAL_PORT = '/dev/ttyUSB0'  # Adjust this to your RFID reader's serial port
+BAUD_RATE = 9600
+WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwaNnczZu3SjJwZ8SYr_7gZPFoUsbr4-uF8VwKTBwoOtUwItD2RMVelGTa7u-yg0N8M/exec'  # Replace with your actual Web App URL
+
+# Regular expression to clean RFID data
+rfidPattern = re.compile(b'[\W_]+')
+
+# Dictionary to track RFID scan sessions
+rfid_sessions = {}
+
+def log_rfid(tag_id, time_stamp, event_type):
+    """Send the RFID scan data to Google Sheets via the Web App."""
+    data = {"tagId": tag_id, "timeStamp": time_stamp, "eventType": event_type}
+    response = requests.post(WEB_APP_URL, json=data)
+    print(f"Logged {event_type} for RFID Tag ID: {tag_id} at {time_stamp}")
+
+def read_rfid():
+    """Read RFID tags and determine the event type (start or end)."""
+    with serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1) as ser:
+        print("Ready to read RFID tags. Present a tag to the reader.")
+        while True:
+            data = ser.read(10)  # Adjust based on your RFID reader's data length
+            if data:
+                tag_id = rfidPattern.sub(b'', data).strip()
+                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+                if tag_id in rfid_sessions:
+                    # Log as 'End' event and remove from session tracking
+                    log_rfid(tag_id, current_time, "End")
+                    del rfid_sessions[tag_id]
+                else:
+                    # Log as 'Start' event and add to session tracking
+                    rfid_sessions[tag_id] = current_time
+                    log_rfid(tag_id, current_time, "Start")
+
+if __name__ == '__main__':
+    try:
+        read_rfid()
+    except KeyboardInterrupt:
+        print("Program terminated.")
 
